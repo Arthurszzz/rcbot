@@ -11,9 +11,16 @@ import os
 client = commands.Bot(command_prefix='!', intents=discord.Intents.all(), help_command=None)
 
 
-def log_command(ctx, content=None):
-    # gotta fix ss cus it still doesnt log
-    return f'{ctx.author} used "{ctx.message.content if not content else f"{ctx.prefix}{ctx.command} {content}"}" in "#{ctx.channel}" at {datetime.now().strftime("%H:%M:%S")}'
+def log_command(ctx, args=None, error=False):
+    if ctx.message.content:
+        command = ctx.message.content
+    else:
+        if args:
+            content = " "+args
+        else:
+            content = ""
+        command = f"{ctx.prefix}{ctx.command}{content}"
+    return f'{ctx.author} {"caused an error using" if error else "executed"} "{command}" in "#{ctx.channel}" at {datetime.now().strftime("%H:%M:%S")}'
 
 
 @client.event
@@ -30,9 +37,7 @@ async def on_ready():
 @client.event
 async def on_command_error(ctx, error):
     await ctx.reply(error, ephemeral=True)
-    return print(
-        f'{ctx.author} caused an error using "{ctx.message.content}" in "#{ctx.channel}" at {datetime.now().strftime("%H:%M:%S")}'
-    )
+    return print(log_command(ctx, error, error=True))
 
 
 # Bot commands
@@ -80,14 +85,14 @@ async def cmd_command(ctx, *, command):
     print(log_command(ctx, command))
 
 
-@client.hybrid_command(name="site", with_app_command=True, description="opens the specifiec site in the host")
+@client.hybrid_command(name="site", with_app_command=True, description="opens the specified site in the host")
 async def site_command(ctx, site):
     if validators.url(site):
         await ctx.reply(f'Successfully started "{site}"', ephemeral=True)
         subprocess.run(f'start {site}', shell=True)
         print(log_command(ctx, site))
     else:
-        raise Exception(f'"{site}" is not a valid site')
+        raise Exception(f'"{site}" is not a valid url')
 
 
 if __name__ == '__main__':
